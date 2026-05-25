@@ -2,7 +2,6 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import json
 import time
 import uuid
 from openai import OpenAI
@@ -10,8 +9,8 @@ from datetime import datetime
 
 # ---------- 页面样式配置 ----------
 st.set_page_config(
-    page_title="猪育种智能助手", 
-    page_icon="🐷", 
+    page_title="猪育种智能助手",
+    page_icon="🐷",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -43,8 +42,7 @@ st.markdown(
         border-right: 1px solid #e0d5b5;
     }
 
-    /* 对话历史主标题 */
-    div[data-testid="stSidebar"] .stMarkdown h1, 
+    div[data-testid="stSidebar"] .stMarkdown h1,
     div[data-testid="stSidebar"] .stMarkdown h2,
     div[data-testid="stSidebar"] .stMarkdown h3 {
         color: #4A7A3F;
@@ -153,7 +151,7 @@ def init_db():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', sample_data)
         conn.commit()
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS chat_sessions (
             session_id TEXT PRIMARY KEY,
@@ -246,25 +244,29 @@ except:
 # ---------- 侧边栏：会话历史 + 配置 ----------
 with st.sidebar:
     st.header("📜 对话历史")
-    
+
+    # ----- 初始化当前会话（不再自动创建，可能为 None）-----
     if "current_session_id" not in st.session_state:
         sessions = get_all_sessions()
         if sessions:
             st.session_state.current_session_id = sessions[0][0]
+            st.session_state.messages = load_messages(sessions[0][0])
         else:
-            st.session_state.current_session_id = create_new_session()
-        st.session_state.messages = load_messages(st.session_state.current_session_id)
-    
+            st.session_state.current_session_id = None
+            st.session_state.messages = []
+
+    # ----- 新建对话 -----
     if st.button("➕ 新建对话", use_container_width=True):
         new_id = create_new_session()
         st.session_state.current_session_id = new_id
         st.session_state.messages = []
         st.rerun()
-    
+
+    # ----- 列出所有会话（两列布局）-----
     sessions = get_all_sessions()
     for idx, (sess_id, title, updated) in enumerate(sessions):
         display_title = title[:20] + "…" if len(title) > 20 else title
-        col1, col2 = st.columns([6, 1])  # 两列布局，标题占6份，菜单占1份
+        col1, col2 = st.columns([6, 1])
         with col1:
             if st.button(f"📁 {display_title}", key=f"load_{sess_id}_{idx}", use_container_width=True,
                          help=title if len(title) > 20 else None):
@@ -272,24 +274,31 @@ with st.sidebar:
                 st.session_state.messages = load_messages(sess_id)
                 st.rerun()
         with col2:
-            # 使用 popover 作为菜单按钮
             with st.popover("⋮", help="更多操作"):
-                # 重命名选项
+                # 重命名
                 new_title = st.text_input("重命名", value=title, key=f"rename_input_{sess_id}")
                 if st.button("保存", key=f"rename_save_{sess_id}"):
                     if new_title.strip():
                         rename_session(sess_id, new_title.strip())
                         st.rerun()
                 st.divider()
-                # 删除选项
+                # 删除逻辑（支持删除最后一个会话，不会自动新建）
                 if st.button("删除对话", key=f"del_{sess_id}_{idx}"):
+                    # 获取其他会话
+                    other_sessions = [s for s in get_all_sessions() if s[0] != sess_id]
                     if sess_id == st.session_state.current_session_id:
-                        new_id = create_new_session()
-                        st.session_state.current_session_id = new_id
-                        st.session_state.messages = []
+                        if other_sessions:
+                            # 切换到另一个会话
+                            new_id = other_sessions[0][0]
+                            st.session_state.current_session_id = new_id
+                            st.session_state.messages = load_messages(new_id)
+                        else:
+                            # 没有其他会话，进入空状态
+                            st.session_state.current_session_id = None
+                            st.session_state.messages = []
                     delete_session(sess_id)
                     st.rerun()
-    
+
     st.divider()
     st.header("⚙️ 智能配置")
     if api_key is None:
@@ -333,43 +342,49 @@ def get_llm_response_stream(messages):
     except Exception as e:
         yield f"抱歉，发生了一点问题：{str(e)}"
 
-# ---------- 聊天界面 ----------
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+# ---------- 聊天界面（支持空状态）----------
+if st.session_state.current_session_id is None:
+    st.info("👋 暂无对话，请点击左侧「新建对话」开始聊天。")
+else:
+    # 显示历史消息
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-if prompt := st.chat_input("🐷 请输入你的问题，例如：查询大白猪的平均日增重？"):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    save_message(st.session_state.current_session_id, "user", prompt)
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    # 输入框
+    if prompt := st.chat_input("🐷 请输入你的问题，例如：查询大白猪的平均日增重？"):
+        # 保存用户消息
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        save_message(st.session_state.current_session_id, "user", prompt)
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        full_response = ""
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
 
-        is_db_query = "查询" in prompt and ("猪" in prompt or "breed" in prompt or "品种" in prompt)
-        
-        if is_db_query:
-            breeds = ["大白猪", "长白猪", "杜洛克", "PIC"]
-            keyword = None
-            for b in breeds:
-                if b in prompt:
-                    keyword = b
-                    break
-            sql = f"SELECT * FROM pigs WHERE breed LIKE '%{keyword}%'" if keyword else "SELECT * FROM pigs LIMIT 10"
-            result = query_database(sql)
-            if isinstance(result, pd.DataFrame) and not result.empty:
-                result_str = f"📋 查询结果（{keyword or '部分猪只'}）：\n{result.to_markdown()}"
+            is_db_query = "查询" in prompt and ("猪" in prompt or "breed" in prompt or "品种" in prompt)
+
+            if is_db_query:
+                breeds = ["大白猪", "长白猪", "杜洛克", "PIC"]
+                keyword = None
+                for b in breeds:
+                    if b in prompt:
+                        keyword = b
+                        break
+                sql = f"SELECT * FROM pigs WHERE breed LIKE '%{keyword}%'" if keyword else "SELECT * FROM pigs LIMIT 10"
+                result = query_database(sql)
+                if isinstance(result, pd.DataFrame) and not result.empty:
+                    result_str = f"📋 查询结果（{keyword or '部分猪只'}）：\n{result.to_markdown()}"
+                else:
+                    result_str = result if isinstance(result, str) else "抱歉，没有找到匹配的数据。"
+                for char in result_str:
+                    full_response += char
+                    message_placeholder.markdown(full_response + "▌")
+                    time.sleep(0.02)
+                message_placeholder.markdown(full_response)
             else:
-                result_str = result if isinstance(result, str) else "抱歉，没有找到匹配的数据。"
-            for char in result_str:
-                full_response += char
-                message_placeholder.markdown(full_response + "▌")
-                time.sleep(0.02)
-            message_placeholder.markdown(full_response)
-        else:
-            full_response = st.write_stream(get_llm_response_stream(st.session_state.messages), cursor="▌")
-        
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
-        save_message(st.session_state.current_session_id, "assistant", full_response)
+                full_response = st.write_stream(get_llm_response_stream(st.session_state.messages), cursor="▌")
+
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            save_message(st.session_state.current_session_id, "assistant", full_response)
