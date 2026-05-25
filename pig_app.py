@@ -37,24 +37,86 @@ st.markdown(
         background-color: rgba(240, 248, 235, 0.9);
     }
 
-    /* ===== 优化侧边栏会话历史按钮 ===== */
-    /* 让按钮内文字自动换行，防止溢出 */
-    div[data-testid="stSidebar"] .stButton button {
+    /* ===== 侧边栏对话历史美化 ===== */
+    div[data-testid="stSidebar"] {
+        background-color: #fef9e6;  /* 暖米色背景，与农业风呼应 */
+        border-right: 1px solid #e0d5b5;
+    }
+
+    /* 对话历史主标题 */
+    div[data-testid="stSidebar"] .stMarkdown h1, 
+    div[data-testid="stSidebar"] .stMarkdown h2,
+    div[data-testid="stSidebar"] .stMarkdown h3 {
+        color: #4A7A3F;
+        font-weight: 600;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        letter-spacing: 1px;
+    }
+
+    /* “新建对话”按钮单独样式 */
+    div[data-testid="stSidebar"] .stButton > button:first-child {
+        background-color: #4A7A3F;
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        margin-bottom: 1rem;
+        transition: all 0.2s ease;
+    }
+    div[data-testid="stSidebar"] .stButton > button:first-child:hover {
+        background-color: #2c5a2a;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    /* 每个会话项的容器（三列布局） */
+    div[data-testid="stSidebar"] div[data-testid="column"] {
+        align-items: center;
+        margin-bottom: 8px;  /* 项目之间的垂直间距 */
+    }
+
+    /* 会话标题按钮（第一个列中的按钮） */
+    div[data-testid="stSidebar"] div[data-testid="column"]:first-child .stButton button {
+        background-color: #fff9ef;
+        border: 1px solid #e2dccd;
+        border-radius: 12px;
+        color: #3b2e1e;
+        font-size: 0.9rem;
+        font-weight: normal;
+        padding: 0.55rem 0.8rem;
+        justify-content: flex-start;
+        transition: background 0.15s, border-color 0.15s;
         white-space: normal !important;
         word-break: break-word;
         text-align: left;
         height: auto;
-        line-height: 1.3;
-        padding: 0.4rem 0.6rem;
-        font-size: 0.85rem;
         width: 100%;
     }
-    /* 针对编辑和删除按钮，保持紧凑 */
-    div[data-testid="stSidebar"] div[data-testid="column"]:nth-of-type(2) .stButton button,
-    div[data-testid="stSidebar"] div[data-testid="column"]:nth-of-type(3) .stButton button {
-        padding: 0.4rem 0.2rem;
+    div[data-testid="stSidebar"] div[data-testid="column"]:first-child .stButton button:hover {
+        background-color: #f2ebd8;
+        border-color: #c7b887;
+    }
+
+    /* 编辑和删除按钮样式 */
+    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(2) .stButton button,
+    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(3) .stButton button {
+        background-color: transparent;
+        border: 1px solid #ddd2b6;
+        border-radius: 20px;
+        color: #7a6a4e;
         font-size: 0.8rem;
+        padding: 0.45rem 0.2rem;
+        transition: all 0.15s;
+        width: 100%;
         text-align: center;
+    }
+    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(2) .stButton button:hover,
+    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(3) .stButton button:hover {
+        background-color: #f0e5d2;
+        border-color: #b8a77c;
+        color: #3b2e1e;
     }
     </style>
     """,
@@ -156,7 +218,6 @@ def save_message(session_id, role, content):
     cursor.execute("UPDATE chat_sessions SET updated_at = ? WHERE session_id = ?",
                    (datetime.now().isoformat(), session_id))
     conn.commit()
-    # 自动命名：如果还没有标题且是用户第一条消息，提取前20字作为标题
     cursor.execute("SELECT COUNT(*) FROM chat_messages WHERE session_id = ?", (session_id,))
     count = cursor.fetchone()[0]
     if count == 1 and role == "user":
@@ -188,7 +249,6 @@ except:
 with st.sidebar:
     st.header("📜 对话历史")
     
-    # 初始化当前会话
     if "current_session_id" not in st.session_state:
         sessions = get_all_sessions()
         if sessions:
@@ -197,29 +257,23 @@ with st.sidebar:
             st.session_state.current_session_id = create_new_session()
         st.session_state.messages = load_messages(st.session_state.current_session_id)
     
-    # 新建对话按钮
     if st.button("➕ 新建对话", use_container_width=True):
         new_id = create_new_session()
         st.session_state.current_session_id = new_id
         st.session_state.messages = []
         st.rerun()
     
-    # 列出所有会话（优化显示：限制标题长度，鼠标悬停显示全名）
     sessions = get_all_sessions()
     for idx, (sess_id, title, updated) in enumerate(sessions):
-        # 显示最多15个字符，超出加省略号
         display_title = title[:15] + "…" if len(title) > 15 else title
-        # 使用三列布局：标题（宽）、编辑（窄）、删除（窄）
         col1, col2, col3 = st.columns([5, 1, 1])
         with col1:
-            # 加载会话按钮，鼠标悬停显示完整标题
             if st.button(f"📁 {display_title}", key=f"load_{sess_id}_{idx}", use_container_width=True,
                          help=title if len(title) > 15 else None):
                 st.session_state.current_session_id = sess_id
                 st.session_state.messages = load_messages(sess_id)
                 st.rerun()
         with col2:
-            # 重命名按钮
             with st.popover("✏️", help="重命名"):
                 new_title = st.text_input("新名称", value=title, key=f"rename_input_{sess_id}")
                 if st.button("保存", key=f"rename_save_{sess_id}"):
@@ -227,7 +281,6 @@ with st.sidebar:
                         rename_session(sess_id, new_title.strip())
                         st.rerun()
         with col3:
-            # 删除按钮
             if st.button("🗑️", key=f"del_{sess_id}_{idx}", help="删除此对话"):
                 if sess_id == st.session_state.current_session_id:
                     new_id = create_new_session()
@@ -285,7 +338,6 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 if prompt := st.chat_input("🐷 请输入你的问题，例如：查询大白猪的平均日增重？"):
-    # 保存用户消息
     st.session_state.messages.append({"role": "user", "content": prompt})
     save_message(st.session_state.current_session_id, "user", prompt)
     with st.chat_message("user"):
