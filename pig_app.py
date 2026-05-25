@@ -37,9 +37,9 @@ st.markdown(
         background-color: rgba(240, 248, 235, 0.9);
     }
 
-    /* ===== 侧边栏对话历史美化 ===== */
+    /* ===== 侧边栏美化 ===== */
     div[data-testid="stSidebar"] {
-        background-color: #fef9e6;  /* 暖米色背景，与农业风呼应 */
+        background-color: #fef9e6;
         border-right: 1px solid #e0d5b5;
     }
 
@@ -54,7 +54,7 @@ st.markdown(
         letter-spacing: 1px;
     }
 
-    /* “新建对话”按钮单独样式 */
+    /* 新建对话按钮 */
     div[data-testid="stSidebar"] .stButton > button:first-child {
         background-color: #4A7A3F;
         color: white;
@@ -71,13 +71,13 @@ st.markdown(
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
 
-    /* 每个会话项的容器（三列布局） */
+    /* 会话项两列布局 */
     div[data-testid="stSidebar"] div[data-testid="column"] {
         align-items: center;
-        margin-bottom: 8px;  /* 项目之间的垂直间距 */
+        margin-bottom: 8px;
     }
 
-    /* 会话标题按钮（第一个列中的按钮） */
+    /* 会话标题按钮 */
     div[data-testid="stSidebar"] div[data-testid="column"]:first-child .stButton button {
         background-color: #fff9ef;
         border: 1px solid #e2dccd;
@@ -87,33 +87,31 @@ st.markdown(
         font-weight: normal;
         padding: 0.55rem 0.8rem;
         justify-content: flex-start;
-        transition: background 0.15s, border-color 0.15s;
         white-space: normal !important;
         word-break: break-word;
         text-align: left;
         height: auto;
         width: 100%;
+        transition: background 0.15s, border-color 0.15s;
     }
     div[data-testid="stSidebar"] div[data-testid="column"]:first-child .stButton button:hover {
         background-color: #f2ebd8;
         border-color: #c7b887;
     }
 
-    /* 编辑和删除按钮样式 */
-    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(2) .stButton button,
-    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(3) .stButton button {
+    /* 功能菜单按钮（第二列） */
+    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(2) .stButton button {
         background-color: transparent;
         border: 1px solid #ddd2b6;
         border-radius: 20px;
         color: #7a6a4e;
-        font-size: 0.8rem;
+        font-size: 1rem;
         padding: 0.45rem 0.2rem;
         transition: all 0.15s;
         width: 100%;
         text-align: center;
     }
-    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(2) .stButton button:hover,
-    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(3) .stButton button:hover {
+    div[data-testid="stSidebar"] div[data-testid="column"]:nth-child(2) .stButton button:hover {
         background-color: #f0e5d2;
         border-color: #b8a77c;
         color: #3b2e1e;
@@ -265,29 +263,32 @@ with st.sidebar:
     
     sessions = get_all_sessions()
     for idx, (sess_id, title, updated) in enumerate(sessions):
-        display_title = title[:15] + "…" if len(title) > 15 else title
-        col1, col2, col3 = st.columns([5, 1, 1])
+        display_title = title[:20] + "…" if len(title) > 20 else title
+        col1, col2 = st.columns([6, 1])  # 两列布局，标题占6份，菜单占1份
         with col1:
             if st.button(f"📁 {display_title}", key=f"load_{sess_id}_{idx}", use_container_width=True,
-                         help=title if len(title) > 15 else None):
+                         help=title if len(title) > 20 else None):
                 st.session_state.current_session_id = sess_id
                 st.session_state.messages = load_messages(sess_id)
                 st.rerun()
         with col2:
-            with st.popover("✏️", help="重命名"):
-                new_title = st.text_input("新名称", value=title, key=f"rename_input_{sess_id}")
+            # 使用 popover 作为菜单按钮
+            with st.popover("⋮", help="更多操作"):
+                # 重命名选项
+                new_title = st.text_input("重命名", value=title, key=f"rename_input_{sess_id}")
                 if st.button("保存", key=f"rename_save_{sess_id}"):
                     if new_title.strip():
                         rename_session(sess_id, new_title.strip())
                         st.rerun()
-        with col3:
-            if st.button("🗑️", key=f"del_{sess_id}_{idx}", help="删除此对话"):
-                if sess_id == st.session_state.current_session_id:
-                    new_id = create_new_session()
-                    st.session_state.current_session_id = new_id
-                    st.session_state.messages = []
-                delete_session(sess_id)
-                st.rerun()
+                st.divider()
+                # 删除选项
+                if st.button("删除对话", key=f"del_{sess_id}_{idx}"):
+                    if sess_id == st.session_state.current_session_id:
+                        new_id = create_new_session()
+                        st.session_state.current_session_id = new_id
+                        st.session_state.messages = []
+                    delete_session(sess_id)
+                    st.rerun()
     
     st.divider()
     st.header("⚙️ 智能配置")
