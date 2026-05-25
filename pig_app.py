@@ -213,7 +213,7 @@ with st.sidebar:
                 st.rerun()
     
     st.divider()
-   st.header("⚙️ 智能配置")
+    st.header("⚙️ 智能配置")
     if api_key is None:
         api_key = st.text_input("DeepSeek API Key", type="password", help="输入你的API密钥")
     else:
