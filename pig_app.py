@@ -243,7 +243,7 @@ def get_llm_response_stream(messages):
         # 将系统提示词插入到消息列表开头
         full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-         stream = client.chat.completions.create(
+        stream = client.chat.completions.create(
             model="deepseek-chat",
             messages=full_messages,
             temperature=temperature,
